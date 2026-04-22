@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef } from "react";
 import { AI_PERSONALITIES } from "../types/index";
-import { GEMINI_URL, GEMINI_PRO_URL, GEMINI_API_KEY } from "../config";
+import { GEMINI_URL } from "../config";
 
-// ── Gemini API call with retries ────────────────────────────
+// ── Gemini opponent call — INCREASED token limit to fix cutoff ──
 async function callGemini(prompt, retries = 3) {
   let lastError;
-  let delay = 1000;
+  let delay = 1200;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -14,16 +14,23 @@ async function callGemini(prompt, retries = 3) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.85, maxOutputTokens: 600, topP: 0.95 },
+          generationConfig: {
+            temperature: 0.85,
+            maxOutputTokens: 1024, // Increased from 600 to prevent cutoffs
+            topP: 0.95,
+            stopSequences: [],     // No stop sequences that might truncate
+          },
           safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
           ]
         }),
       });
 
       if (res.status === 503 || res.status === 429) {
-        console.warn(`Attempt ${i + 1} failed (${res.status}). Retrying in ${delay}ms...`);
+        console.warn(`Gemini attempt ${i+1} hit rate limit (${res.status}). Waiting ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         delay *= 2;
         continue;
@@ -35,9 +42,16 @@ async function callGemini(prompt, retries = 3) {
       }
 
       const data = await res.json();
+
+      // Check for finish reason — if SAFETY or OTHER, handle gracefully
+      const finishReason = data.candidates?.[0]?.finishReason;
+      if (finishReason === "SAFETY") {
+        return "That argument raises important points, but I'd prefer to address the logical structure rather than the specific framing. Let me challenge the core premise instead.";
+      }
+
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) throw new Error("Empty response from Gemini");
-      return text;
+      return text.trim();
 
     } catch (err) {
       lastError = err;
@@ -50,7 +64,7 @@ async function callGemini(prompt, retries = 3) {
   throw lastError;
 }
 
-// ── Gemini JSON call (for analysis) ─────────────────────────
+// ── Gemini JSON analysis call ────────────────────────────────
 async function callGeminiJSON(prompt, retries = 3) {
   let lastError;
   let delay = 1000;
@@ -64,7 +78,7 @@ async function callGeminiJSON(prompt, retries = 3) {
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 800,
+            maxOutputTokens: 1200,
             responseMimeType: "application/json",
           },
         }),
@@ -84,8 +98,7 @@ async function callGeminiJSON(prompt, retries = 3) {
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) throw new Error("Empty JSON response");
-      
-      // Strip any markdown fences
+
       const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       return JSON.parse(clean);
 
@@ -100,83 +113,122 @@ async function callGeminiJSON(prompt, retries = 3) {
   throw lastError;
 }
 
-// ── Build opponent prompt ────────────────────────────────────
+// ── Opponent prompt — includes FULL history to avoid repetition ──
 function buildOpponentPrompt(topic, personality, phase, history) {
   const p = AI_PERSONALITIES[personality] || AI_PERSONALITIES.aggressive;
-  
-  const historyText = history.length > 0
-    ? "\n\nDebate history so far:\n" + history.map((h, i) =>
-        `Round ${i + 1}:\nHuman: "${h.user}"\nYou replied: "${h.ai}"`
+
+  // Build full history string — this is KEY to prevent repetition/cutoffs
+  const historyText = history.length > 1
+    ? "\n\n--- DEBATE HISTORY (do NOT repeat these, build on them) ---\n" +
+      history.slice(0, -1).map((h, i) =>
+        `Exchange ${i + 1}:\nHuman said: "${h.user}"\nYou responded: "${h.ai}"`
       ).join("\n\n")
     : "";
 
   const phaseInstructions = {
-    opening: "This is the OPENING phase. Make your strongest opening statement. Establish your position powerfully.",
-    rebuttal: "This is the REBUTTAL phase. Directly attack and dismantle the human's specific claims. Be precise and devastating.",
-    closing: "This is the CLOSING phase. Deliver your most powerful closing argument. Summarize why you have won.",
+    opening: "OPENING PHASE: Make your strongest opening statement. Assert your position boldly. Do not ask questions yet.",
+    rebuttal: "REBUTTAL PHASE: Directly dismantle the human's SPECIFIC claims above. Name what they said and tear it apart.",
+    closing: "CLOSING PHASE: This is your final argument. Summarize why you have won decisively. Make it memorable.",
   };
+
+  const lastUserArg = history.length > 0 ? history[history.length - 1].user : "";
 
   return `${p.geminiPersona}
 
 DEBATE TOPIC: "${topic}"
-CURRENT PHASE: ${phaseInstructions[phase] || phaseInstructions.opening}
+${phaseInstructions[phase] || phaseInstructions.opening}
 ${historyText}
 
-The human just argued: "${history[history.length - 1]?.user || "[Opening - respond with your opening statement]"}"
+The human's latest argument: "${lastUserArg || "[Waiting for opening argument]"}"
 
-INSTRUCTIONS:
-- Respond with 2-4 punchy, memorable sentences MAXIMUM
-- Start with the SUBSTANCE, not "I think" or "I argue"
-- Be specific to their actual argument (if there is one)
-- Do NOT be polite or neutral — be the personality you are
-- This is VERBAL speech, so write naturally as if speaking aloud
-- Do NOT use bullet points or numbered lists
+STRICT RULES:
+1. Write 2-4 complete sentences MAXIMUM — SHORT and PUNCHY
+2. ALWAYS complete every sentence fully — never trail off
+3. Start with the substance directly — no "I think" or "I believe"
+4. Be the personality described above — aggressive/questioning/analytical/philosophical
+5. Reference the human's ACTUAL words where possible
+6. End with a complete thought — no ellipsis, no partial sentences
 
-Your response:`;
+YOUR COMPLETE RESPONSE (must be fully finished sentences):`;
 }
 
-// ── Build analysis prompt ────────────────────────────────────
+// ── Analysis prompt ──────────────────────────────────────────
 function buildAnalysisPrompt(topic, userArgument) {
-  return `You are an expert debate coach and logician. Analyze this debate argument.
+  return `You are an expert debate coach and logician. Analyze this debate argument carefully.
 
 TOPIC: "${topic}"
-ARGUMENT: "${userArgument}"
+ARGUMENT TO ANALYZE: "${userArgument}"
 
-Respond with ONLY valid JSON, no markdown:
+Return ONLY valid JSON (no markdown, no code fences):
 {
-  "strength": <integer 0-100>,
-  "opponentStrength": <integer 0-100>,
-  "tone": "<one of: confident|hesitant|aggressive|neutral|passionate>",
-  "keyPoints": ["<strong point made>"],
-  "weakPoints": ["<weakness in their argument>"],
-  "fallacies": ["<fallacy name if detected, empty array if none>"],
+  "strength": 65,
+  "opponentStrength": 70,
+  "tone": "confident",
+  "keyPoints": ["Main point they made well"],
+  "weakPoints": ["Weakness in their logic"],
+  "fallacies": [],
   "coaching": {
-    "betterPhrasing": ["<how to phrase argument better>"],
-    "missedArguments": ["<important point they missed>"],
-    "strongerExamples": ["<better example they could use>"],
-    "deliveryTips": ["<tip for debate delivery>"]
+    "betterPhrasing": ["More effective way to state the argument"],
+    "missedArguments": ["Key point they should have made"],
+    "strongerExamples": ["Better real-world example to use"],
+    "deliveryTips": ["How to deliver this more persuasively"]
   },
   "strategies": [
-    {"type": "<strategy name>", "content": "<what opponent might do next>"}
+    {"type": "Predict", "content": "What the opponent will likely say next"}
   ]
+}
+
+For fallacies, use ONLY these exact names if detected (empty array if none): ad_hominem, straw_man, false_dichotomy, slippery_slope, appeal_to_authority, hasty_generalization, circular_reasoning, appeal_to_emotion, red_herring, bandwagon`;
+}
+
+// ── Report card prompt ───────────────────────────────────────
+export function buildReportPrompt(topic, exchanges, scores, personality) {
+  const allFallacies = exchanges.flatMap(e => e.fallacies || []);
+  const avgStrength = exchanges.length > 0
+    ? Math.round(exchanges.reduce((s, e) => s + (e.userStrength || 0), 0) / exchanges.length)
+    : 0;
+
+  return `You are generating a debate performance report card.
+
+TOPIC: "${topic}"
+AI PERSONALITY DEBATED: ${personality}
+ROUNDS COMPLETED: ${exchanges.length}
+AVERAGE ARGUMENT STRENGTH: ${avgStrength}%
+FINAL SCORE — Human: ${Math.round(scores.user)}, AI: ${Math.round(scores.opponent)}
+FALLACIES DETECTED: ${allFallacies.join(", ") || "none"}
+
+Human's arguments:
+${exchanges.map((e, i) => `Round ${i+1}: "${e.userText}"`).join("\n")}
+
+Generate a debate report card. Return ONLY valid JSON:
+{
+  "overallGrade": "B+",
+  "percentile": 72,
+  "summary": "2-3 sentence overall assessment of the debater's performance",
+  "strengths": ["Specific strength 1", "Specific strength 2", "Specific strength 3"],
+  "weaknesses": ["Specific weakness 1", "Specific weakness 2"],
+  "fallacySummary": "Brief analysis of logical fallacies used or avoided",
+  "bestArgument": "Quote or describe their single best argument from the debate",
+  "worstArgument": "Quote or describe their weakest argument",
+  "improvementTips": ["Actionable tip 1", "Actionable tip 2", "Actionable tip 3"],
+  "verdict": "winner" or "loser" or "draw",
+  "debateStyle": "e.g. Emotional Orator / Data-Driven Analyst / Philosophical Thinker / Aggressive Debater"
 }`;
 }
 
-// ── FALLBACK defaults ────────────────────────────────────────
+// ── Fallback analysis ────────────────────────────────────────
 const FALLBACK_ANALYSIS = {
-  strength: 55,
-  opponentStrength: 65,
-  tone: "neutral",
-  keyPoints: ["Argument submitted"],
+  strength: 55, opponentStrength: 65, tone: "neutral",
+  keyPoints: ["Point submitted for analysis"],
   weakPoints: ["Could be more specific"],
   fallacies: [],
   coaching: {
-    betterPhrasing: ["Try to be more specific with examples"],
-    missedArguments: ["Consider addressing counter-evidence"],
-    strongerExamples: ["Use concrete statistics to support your point"],
-    deliveryTips: ["Lead with your strongest point first"],
+    betterPhrasing: ["Try leading with your strongest evidence"],
+    missedArguments: ["Consider the economic angle"],
+    strongerExamples: ["Use a specific real-world case study"],
+    deliveryTips: ["State your conclusion first, then justify it"],
   },
-  strategies: [{ type: "Anticipate", content: "Opponent may challenge your evidence" }],
+  strategies: [{ type: "Predict", content: "Opponent will likely challenge your main assumption" }],
 };
 
 // ── Hook ─────────────────────────────────────────────────────
@@ -196,16 +248,15 @@ export function useDebateAI({ topic, aiPersonality, debatePhase }) {
     setError(null);
 
     try {
-      // Add user text to history before calling (for context)
-      const currentHistory = [...history.current, { user: userText, ai: "" }];
+      // Include userText in history BEFORE calling, so the prompt has full context
+      const fullHistory = [...history.current, { user: userText, ai: "" }];
 
-      // Run both calls in parallel
       const [aiResponseText, analysisData] = await Promise.all([
-        callGemini(buildOpponentPrompt(topic, aiPersonality, debatePhase, currentHistory)),
+        callGemini(buildOpponentPrompt(topic, aiPersonality, debatePhase, fullHistory)),
         callGeminiJSON(buildAnalysisPrompt(topic, userText)).catch(() => FALLBACK_ANALYSIS),
       ]);
 
-      // Update history with the actual AI response
+      // Store complete exchange in history
       history.current.push({ user: userText, ai: aiResponseText });
 
       setResponse(aiResponseText);
@@ -232,26 +283,23 @@ export function useDebateAI({ topic, aiPersonality, debatePhase }) {
       };
 
     } catch (err) {
-  // Add a fallback so 'err' is never undefined
-  const errorMessage = err?.message || "An unexpected API error occurred.";
-  console.error("Debate AI error:", errorMessage);
-  setError(errorMessage);
-  setResponse("The AI is currently unavailable. Please check the console.");
-  return null;
-} finally {
+      const msg = err?.message || "API error occurred";
+      console.error("Debate AI error:", msg);
+      setError(msg);
+      const fallback = "Your argument has merit, but the core assumption remains unaddressed. I'll build my case from the ground up.";
+      setResponse(fallback);
+      history.current.push({ user: userText, ai: fallback });
+      return { aiResponse: fallback, userStrength: 50, opponentStrength: 55, fallacies: [] };
+    } finally {
       setIsThinking(false);
     }
   }, [topic, aiPersonality, debatePhase]);
 
   const resetDebate = useCallback(() => {
     history.current = [];
-    setResponse("");
-    setAnalysis(null);
-    setCoaching(null);
-    setOpponentConfidence(70);
-    setStrategies([]);
-    setError(null);
+    setResponse(""); setAnalysis(null); setCoaching(null);
+    setOpponentConfidence(70); setStrategies([]); setError(null);
   }, []);
 
-  return { response, isThinking, analysis, coaching, opponentConfidence, strategies, error, submitArgument, resetDebate };
+  return { response, isThinking, analysis, coaching, opponentConfidence, strategies, error, submitArgument, resetDebate, history };
 }

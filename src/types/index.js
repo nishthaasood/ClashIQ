@@ -57,14 +57,14 @@ export const AI_PERSONALITIES = {
 };
 
 export const LOGICAL_FALLACIES = {
-  ad_hominem: { name: "Ad Hominem", description: "Attacking the person rather than their argument." },
-  straw_man: { name: "Straw Man", description: "Misrepresenting someone's argument to make it easier to attack." },
-  false_dichotomy: { name: "False Dichotomy", description: "Presenting only two options when more exist." },
-  slippery_slope: { name: "Slippery Slope", description: "Assuming one event will lead to extreme consequences without justification." },
-  appeal_to_authority: { name: "Appeal to Authority", description: "Using an authority figure's opinion as evidence without supporting data." },
-  hasty_generalization: { name: "Hasty Generalization", description: "Drawing broad conclusions from a small sample." },
-  circular_reasoning: { name: "Circular Reasoning", description: "Using the conclusion as a premise in your argument." },
-  appeal_to_emotion: { name: "Appeal to Emotion", description: "Manipulating emotions instead of using logical arguments." },
-  red_herring: { name: "Red Herring", description: "Introducing irrelevant information to distract from the main argument." },
-  bandwagon: { name: "Bandwagon", description: "Arguing something is true because many people believe it." },
+  ad_hominem: { name: "Ad Hominem", description: "Attacking the person rather than their argument.", color: "#E84855" },
+  straw_man: { name: "Straw Man", description: "Misrepresenting someone's argument to make it easier to attack.", color: "#F97316" },
+  false_dichotomy: { name: "False Dichotomy", description: "Presenting only two options when more exist.", color: "#EAB308" },
+  slippery_slope: { name: "Slippery Slope", description: "Assuming one event leads to extreme consequences without justification.", color: "#8B5CF6" },
+  appeal_to_authority: { name: "Appeal to Authority", description: "Using authority opinion as evidence without supporting data.", color: "#3B82F6" },
+  hasty_generalization: { name: "Hasty Generalization", description: "Drawing broad conclusions from a small sample.", color: "#10B981" },
+  circular_reasoning: { name: "Circular Reasoning", description: "Using the conclusion as a premise in the argument.", color: "#F59E0B" },
+  appeal_to_emotion: { name: "Appeal to Emotion", description: "Manipulating emotions instead of using logical arguments.", color: "#E84855" },
+  red_herring: { name: "Red Herring", description: "Introducing irrelevant information to distract from the main argument.", color: "#06B6D4" },
+  bandwagon: { name: "Bandwagon", description: "Arguing something is true because many people believe it.", color: "#6366F1" },
 };

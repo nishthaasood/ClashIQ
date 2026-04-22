@@ -3,6 +3,7 @@ import { HumanAvatar } from "./HumanAvatar";
 import { AI_PERSONALITIES, LOGICAL_FALLACIES } from "../types/index";
 import { Icon } from "../icons/index";
 import { useSpeechRecognition } from "../hooks/useSpeech";
+import { FallacyChips } from "./FallacyAlert";
 
 // ── Strength Bar ───────────────────────────────────────────
 export function StrengthBar({ value, label, variant = "user" }) {
@@ -66,24 +67,6 @@ export function ScoreBoard({ scores, round, maxRounds, debatePhase, debateEnded 
   );
 }
 
-// ── Fallacy Alert ──────────────────────────────────────────
-export function FallacyAlert({ fallacy, onDismiss }) {
-  const key = (fallacy || "").toLowerCase().replace(/ /g, "_");
-  const info = LOGICAL_FALLACIES[key] || { name: fallacy, description: "A logical fallacy was detected in your argument." };
-  return (
-    <div className="fallacy-toast">
-      <Icon.AlertTriangle width={16} height={16} className="fallacy-icon"/>
-      <div className="fallacy-body">
-        <strong className="fallacy-name">Fallacy: {info.name}</strong>
-        <span className="fallacy-desc">{info.description}</span>
-      </div>
-      <button className="fallacy-close" onClick={onDismiss}>
-        <Icon.X width={14} height={14}/>
-      </button>
-    </div>
-  );
-}
-
 // ── Opponent Panel ─────────────────────────────────────────
 export function OpponentPanel({ response, isSpeaking, isMuted, isPaused, onToggleMute, onTogglePause, isThinking, opponentConfidence, strategies, aiPersonality }) {
   const personality = AI_PERSONALITIES[aiPersonality] || AI_PERSONALITIES.aggressive;
@@ -129,22 +112,24 @@ export function OpponentPanel({ response, isSpeaking, isMuted, isPaused, onToggl
         </div>
       )}
 
-      <StrengthBar value={opponentConfidence} label="Opponent Confidence" variant="opp"/>
+      <div className="opp-panel-footer">
+        <StrengthBar value={opponentConfidence} label="Opponent Confidence" variant="opp"/>
 
-      {strategies.length > 0 && (
-        <div className="strategy-block">
-          <div className="strategy-eyebrow">
-            <Icon.Target width={12} height={12}/>
-            Detected Tactics
-          </div>
-          {strategies.slice(0,2).map((s, i) => (
-            <div key={i} className="strategy-row">
-              <span className="strategy-type">{s.type}</span>
-              <span className="strategy-desc">{s.content}</span>
+        {strategies.length > 0 && (
+          <div className="strategy-block">
+            <div className="strategy-eyebrow">
+              <Icon.Target width={11} height={11}/>
+              Predicted Tactics
             </div>
-          ))}
-        </div>
-      )}
+            {strategies.slice(0,2).map((s,i) => (
+              <div key={i} className="strategy-row">
+                <span className="strategy-type">{s.type}</span>
+                <span className="strategy-desc">{s.content}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -167,24 +152,25 @@ export function UserPanel({ transcript, onTranscriptChange, onStopListening, onS
 
   const phasePrompts = {
     opening: "Present your opening argument…",
-    rebuttal: "Rebut your opponent's claim directly…",
+    rebuttal: "Rebut your opponent's specific claims…",
     closing: "Deliver your closing statement…",
   };
 
   const toneColors = { confident:"#22C55E", hesitant:"#94A3B8", aggressive:"#E84855", neutral:"#94A3B8", passionate:"#F59E0B" };
+  const toneEmojis = { confident:"💪", hesitant:"😐", aggressive:"🔥", neutral:"😶", passionate:"❤️‍🔥" };
 
   return (
     <div className="panel user-panel">
       <div className="panel-head">
         <div className="panel-head-l">
           <div className="panel-chip user-chip">YOUR ARGUMENT</div>
-          <span className="panel-sub">Type or use voice input</span>
+          <span className="panel-sub">Type or speak your argument</span>
         </div>
         <div className="panel-head-r">
           <button className="icon-btn" onClick={onReset} title="Reset debate">
             <Icon.Refresh width={14} height={14}/>
           </button>
-          <button className={`icon-btn ${isListening?"icon-btn-mic":""}`} onClick={handleMic} title={isListening?"Stop listening":"Start voice"}>
+          <button className={`icon-btn ${isListening?"icon-btn-mic":""}`} onClick={handleMic} title={isListening?"Stop":"Voice input"}>
             {isListening ? <Icon.MicOff width={14} height={14}/> : <Icon.Mic width={14} height={14}/>}
           </button>
         </div>
@@ -193,7 +179,7 @@ export function UserPanel({ transcript, onTranscriptChange, onStopListening, onS
       {isListening && (
         <div className="listening-bar">
           <div className="listen-waves">
-            {[...Array(8)].map((_, i) => (
+            {[...Array(8)].map((_,i) => (
               <div key={i} className="lwave" style={{ animationDelay:`${i*0.08}s` }}/>
             ))}
           </div>
@@ -231,27 +217,28 @@ export function UserPanel({ transcript, onTranscriptChange, onStopListening, onS
             <Icon.BarChart width={13} height={13}/>
             Argument Analysis
           </div>
-          <div className="analysis-row-line">
-            <span className="a-lbl">Detected Tone</span>
-            <span className="a-tone" style={{ color:toneColors[analysis.tone]||"#94A3B8" }}>
-              {analysis.tone}
+
+          <div className="analysis-tone-row">
+            <span className="a-lbl">Tone</span>
+            <span className="a-tone-badge" style={{ color:toneColors[analysis.tone]||"#94A3B8", background:`${toneColors[analysis.tone]||"#94A3B8"}18`, borderColor:`${toneColors[analysis.tone]||"#94A3B8"}30` }}>
+              {toneEmojis[analysis.tone]||"😶"} {analysis.tone}
             </span>
           </div>
+
           <StrengthBar value={analysis.strength} label="Argument Strength" variant="user"/>
+
+          {/* Fallacies — improved display */}
           {analysis.fallacies?.length > 0 && (
-            <div className="a-group">
-              <div className="ag-lbl warn-lbl"><Icon.AlertTriangle width={11} height={11}/> Fallacies Detected</div>
-              <div className="ag-chips">
-                {analysis.fallacies.map((f,i) => <span key={i} className="chip warn-chip">{f}</span>)}
-              </div>
-            </div>
+            <FallacyChips fallacies={analysis.fallacies}/>
           )}
+
           {analysis.keyPoints?.length > 0 && (
             <div className="a-group">
               <div className="ag-lbl good-lbl"><Icon.Check width={11} height={11}/> Key Points</div>
               {analysis.keyPoints.slice(0,3).map((p,i) => <p key={i} className="ag-pt">· {p}</p>)}
             </div>
           )}
+
           {analysis.weakPoints?.length > 0 && (
             <div className="a-group">
               <div className="ag-lbl weak-lbl"><Icon.AlertTriangle width={11} height={11}/> Weak Points</div>
@@ -260,55 +247,6 @@ export function UserPanel({ transcript, onTranscriptChange, onStopListening, onS
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Coach Panel ────────────────────────────────────────────
-export function CoachPanel({ coaching, isAnalyzing }) {
-  const sections = [
-    { key:"deliveryTips",      icon:Icon.Zap,      label:"Delivery Tips",      cls:"tip-amber" },
-    { key:"betterPhrasing",    icon:Icon.BookOpen, label:"Better Phrasing",    cls:"tip-blue"  },
-    { key:"missedArguments",   icon:Icon.Target,   label:"Missed Points",      cls:"tip-rose"  },
-    { key:"strongerExamples",  icon:Icon.Sparkles, label:"Stronger Examples",  cls:"tip-green" },
-  ];
-
-  return (
-    <div className="coach-card">
-      <div className="coach-hd">
-        <Icon.Trophy width={17} height={17} className="coach-icon"/>
-        <div>
-          <div className="coach-title">COACH FEEDBACK</div>
-          <div className="coach-sub">Personalized coaching after each round</div>
-        </div>
-      </div>
-      <div className="coach-body">
-        {isAnalyzing ? (
-          <div className="coach-loading">
-            <div className="coach-spinner"/>
-            <span>Analyzing your argument…</span>
-          </div>
-        ) : coaching ? (
-          <div className="coach-grid">
-            {sections.map(({ key, icon:SIcon, label, cls }) =>
-              coaching[key]?.length > 0 ? (
-                <div key={key} className={`coach-section ${cls}`}>
-                  <div className="coach-sec-hd">
-                    <SIcon width={13} height={13}/>
-                    <span>{label}</span>
-                  </div>
-                  {coaching[key].map((item,i) => <p key={i} className="coach-tip">· {item}</p>)}
-                </div>
-              ) : null
-            )}
-          </div>
-        ) : (
-          <div className="coach-empty">
-            <Icon.Brain width={30} height={30} className="coach-empty-icon"/>
-            <p>Submit your argument to receive personalized coaching tips.</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -330,7 +268,7 @@ export function DebateTimeline({ exchanges }) {
         <span className="tl-badge">{exchanges.length} round{exchanges.length!==1?"s":""}</span>
       </div>
       <div className="tl-list">
-        {exchanges.map((ex, i) => (
+        {exchanges.map((ex,i) => (
           <div key={ex.id} className="tl-item">
             <div className="tl-pip"/>
             <div className="tl-body">
