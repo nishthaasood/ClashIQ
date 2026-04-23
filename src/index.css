@@ -509,22 +509,32 @@ color:var(--text); }
 .coach-hd { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border); }
 .coach-icon { color:var(--amber); }
 .coach-title { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; }
-.coach-sub { font-size:0.72rem; color:var(--text3); margin-top:1px; }
+.coach-sub { font-size:0.72rem; color:var(--text3); margin-top:1px;  }
 .coach-body { padding:14px; }
 .coach-loading { display:flex; align-items:center; gap:10px; padding:12px; color:var(--text3); font-size:0.82rem; }
 .coach-spinner { width:16px; height:16px; border-radius:50%; border:2px solid var(--border2); border-top-color:var(--accent); animation:spin 0.8s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
 .coach-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:24px; text-align:center; }
 .coach-empty p { font-size:0.8rem; color:var(--text3); line-height:1.5; }
-.coach-grid { display:flex; flex-direction:column; gap:10px; }
+.coach-grid { display:flex; flex-direction:column; gap:10px; color: aliceblue;}
 .coach-section { border-radius:var(--r); padding:10px 12px; border:1px solid var(--border); }
-.coach-section.tip-amber { background:rgba(245,158,11,0.04); border-color:rgba(245,158,11,0.15); }
-.coach-section.tip-blue  { background:rgba(59,130,246,0.04); border-color:rgba(59,130,246,0.15); }
-.coach-section.tip-rose  { background:rgba(232,72,85,0.04);  border-color:rgba(232,72,85,0.15); }
-.coach-section.tip-green { background:rgba(34,197,94,0.04);  border-color:rgba(34,197,94,0.15); }
-.coach-sec-hd { display:flex; align-items:center; gap:5px; font-size:0.67rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text2); margin-bottom:6px; }
+.coach-section.tip-amber { background:rgba(245,158,11,0.04); border-color:rgba(245,158,11,0.15); color:var(--amber) }
+.coach-section.tip-blue  { background:rgba(59,130,246,0.04); border-color:rgba(59,130,246,0.15); color:#60A5FA }
+.coach-section.tip-rose  { background:rgba(232,72,85,0.04);  border-color:rgba(232,72,85,0.15); color:var(--accent) }
+.coach-section.tip-green { background:rgba(34,197,94,0.04);  border-color:rgba(34,197,94,0.15); color:var(--green) }
+.coach-sec-hd { display:flex; align-items:center; gap:5px; font-size:0.67rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:white; margin-bottom:6px; }
 .tip-amber .coach-sec-hd { color:var(--amber); } .tip-blue .coach-sec-hd { color:#60A5FA; } .tip-rose .coach-sec-hd { color:var(--accent); } .tip-green .coach-sec-hd { color:var(--green); }
 .coach-tip { font-size:0.78rem; color:var(--text2); line-height:1.55; margin-top:3px; }
+.coach-tab {
+  color: var(--text2); /* dull default */
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  padding: 6px 12px;
+}
+.coach-tab-active {
+  opacity: 1;
+  font-weight: 600;
+}
 
 /* ── Timeline ── */
 .timeline-card { background:var(--bg1); border:1px solid var(--border); border-radius:var(--r3); overflow:hidden; }
